@@ -4,6 +4,7 @@ locals {
   nodes = var.compute_nodes
 
   effective_subscription_id = coalesce(var.subscription_id, data.azapi_client_config.current.subscription_id)
+  resource_group_id         = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}"
 
   custom_location_resource_id   = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.ExtendedLocation/customLocations/${var.custom_location_id}"
   storage_container_resource_id = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/storageContainers/${var.storage_container_id}"
@@ -32,19 +33,12 @@ ephemeral "vault_kv_secret_v2" "admin_password" {
   name  = var.vault_admin_password_secret_name
 }
 
-resource "azapi_resource" "resource_group" {
-  type     = "Microsoft.Resources/resourceGroups@2024-03-01"
-  name     = var.resource_group_name
-  location = var.location
-  tags     = var.tags
-}
-
 resource "azapi_resource" "machine" {
   for_each = local.nodes
 
   type      = "Microsoft.HybridCompute/machines@2024-07-10"
   name      = each.key
-  parent_id = azapi_resource.resource_group.id
+  parent_id = local.resource_group_id
   location  = var.location
   tags      = local.node_tags[each.key]
 
@@ -62,7 +56,7 @@ resource "azapi_resource" "network_interface" {
 
   type                      = "Microsoft.AzureStackHCI/networkInterfaces@2024-01-01"
   name                      = "${each.key}-nic"
-  parent_id                 = azapi_resource.resource_group.id
+  parent_id                 = local.resource_group_id
   location                  = var.location
   schema_validation_enabled = false
   tags                      = local.node_tags[each.key]
@@ -97,7 +91,7 @@ resource "azapi_resource" "data_disk" {
 
   type                      = "Microsoft.AzureStackHCI/virtualHardDisks@2024-01-01"
   name                      = "${each.key}-datadisk"
-  parent_id                 = azapi_resource.resource_group.id
+  parent_id                 = local.resource_group_id
   location                  = var.location
   schema_validation_enabled = false
   tags                      = local.node_tags[each.key]
@@ -121,7 +115,7 @@ resource "azapi_resource" "db_disk" {
 
   type                      = "Microsoft.AzureStackHCI/virtualHardDisks@2024-01-01"
   name                      = "${each.key}-dbdisk"
-  parent_id                 = azapi_resource.resource_group.id
+  parent_id                 = local.resource_group_id
   location                  = var.location
   schema_validation_enabled = false
   tags                      = local.node_tags[each.key]
@@ -145,7 +139,7 @@ resource "azapi_resource" "log_disk" {
 
   type                      = "Microsoft.AzureStackHCI/virtualHardDisks@2024-01-01"
   name                      = "${each.key}-logdisk"
-  parent_id                 = azapi_resource.resource_group.id
+  parent_id                 = local.resource_group_id
   location                  = var.location
   schema_validation_enabled = false
   tags                      = local.node_tags[each.key]
