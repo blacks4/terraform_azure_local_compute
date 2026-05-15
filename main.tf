@@ -1,28 +1,29 @@
+data "azapi_client_config" "current" {}
+
 locals {
   nodes = var.compute_nodes
 
-  node_tags = {
-    for key, node in local.nodes : key => merge(var.tags, try(node.tags, {}))
-  }
+  effective_subscription_id = coalesce(var.subscription_id, data.azapi_client_config.current.subscription_id)
 
-  disk_properties = {
-    blockSizeBytes  = var.vhd_block_size_bytes
-    containerId     = var.storage_container_id
-    createFromLocal = false
-    creationData = {
-      createOption = "Empty"
-    }
-    diskFileFormat      = var.disk_file_format
-    dynamic             = var.dynamic_disks
-    hyperVGeneration    = var.hyper_v_generation
-    logicalSectorBytes  = var.vhd_logical_sector_bytes
-    maxShares           = 1
-    physicalSectorBytes = var.vhd_physical_sector_bytes
+  custom_location_resource_id   = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.ExtendedLocation/customLocations/${var.custom_location_id}"
+  storage_container_resource_id = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/storageContainers/${var.storage_container_id}"
+  logical_network_resource_id   = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/logicalNetworks/${var.logical_network_id}"
+  image_resource_id             = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/${var.image_id}"
+
+  node_tags = {
+    for vm_name, node in local.nodes : vm_name => merge(var.tags, try(node.tags, {}))
   }
 
   extended_location = {
-    name = var.custom_location_id
+    name = local.custom_location_resource_id
     type = "CustomLocation"
+  }
+
+  windows_configuration = {
+    enableAutomaticUpdates = var.enable_automatic_updates
+    provisionVMAgent       = var.provision_vm_agent
+    provisionVMConfigAgent = var.provision_vm_config_agent
+    timeZone               = var.windows_time_zone
   }
 }
 
@@ -38,81 +39,11 @@ resource "azapi_resource" "resource_group" {
   tags     = var.tags
 }
 
-resource "azapi_resource" "network_interface" {
-  for_each = local.nodes
-
-  type      = "Microsoft.AzureStackHCI/networkInterfaces@2026-02-01-preview"
-  name      = "${each.value.name}-nic01"
-  parent_id = azapi_resource.resource_group.id
-  location  = var.location
-  tags      = local.node_tags[each.key]
-
-  body = {
-    extendedLocation = local.extended_location
-    properties = {
-      bypassSdnPolicies = var.bypass_sdn_policies
-      createFromLocal   = false
-      dnsSettings = {
-        dnsServers = var.dns_servers
-      }
-      ipConfigurations = [
-        {
-          name = "ipconfig1"
-          properties = merge(
-            {
-              subnet = {
-                id = var.logical_network_id
-              }
-            },
-            try(each.value.private_ip, null) == null ? {} : {
-              privateIPAddress = each.value.private_ip
-            }
-          )
-        }
-      ]
-    }
-  }
-}
-
-resource "azapi_resource" "os_disk" {
-  for_each = local.nodes
-
-  type      = "Microsoft.AzureStackHCI/virtualHardDisks@2026-02-01-preview"
-  name      = "${each.value.name}-osdisk"
-  parent_id = azapi_resource.resource_group.id
-  location  = var.location
-  tags      = local.node_tags[each.key]
-
-  body = {
-    extendedLocation = local.extended_location
-    properties = merge(local.disk_properties, {
-      diskSizeGB = each.value.os_disk_size_gb
-    })
-  }
-}
-
-resource "azapi_resource" "data_disk" {
-  for_each = local.nodes
-
-  type      = "Microsoft.AzureStackHCI/virtualHardDisks@2026-02-01-preview"
-  name      = "${each.value.name}-datadisk01"
-  parent_id = azapi_resource.resource_group.id
-  location  = var.location
-  tags      = local.node_tags[each.key]
-
-  body = {
-    extendedLocation = local.extended_location
-    properties = merge(local.disk_properties, {
-      diskSizeGB = each.value.data_disk_size_gb
-    })
-  }
-}
-
 resource "azapi_resource" "machine" {
   for_each = local.nodes
 
-  type      = "Microsoft.HybridCompute/machines@2025-09-16-preview"
-  name      = each.value.name
+  type      = "Microsoft.HybridCompute/machines@2024-07-10"
+  name      = each.key
   parent_id = azapi_resource.resource_group.id
   location  = var.location
   tags      = local.node_tags[each.key]
@@ -126,12 +57,117 @@ resource "azapi_resource" "machine" {
   }
 }
 
+resource "azapi_resource" "network_interface" {
+  for_each = local.nodes
+
+  type                      = "Microsoft.AzureStackHCI/networkInterfaces@2024-01-01"
+  name                      = "${each.key}-nic"
+  parent_id                 = azapi_resource.resource_group.id
+  location                  = var.location
+  schema_validation_enabled = false
+  tags                      = local.node_tags[each.key]
+
+  body = {
+    extendedLocation = local.extended_location
+    properties = {
+      ipConfigurations = [
+        {
+          name = "ipconfig1"
+          properties = merge(
+            {
+              subnet = {
+                id = local.logical_network_resource_id
+              }
+            },
+            try(trimspace(each.value.private_ip), "") == "" ? {} : {
+              privateIPAddress = trimspace(each.value.private_ip)
+            }
+          )
+        }
+      ]
+    }
+  }
+}
+
+resource "azapi_resource" "data_disk" {
+  for_each = {
+    for vm_name, node in local.nodes : vm_name => node
+    if try(node.data_disk_size_gb, 0) > 0
+  }
+
+  type                      = "Microsoft.AzureStackHCI/virtualHardDisks@2024-01-01"
+  name                      = "${each.key}-datadisk"
+  parent_id                 = azapi_resource.resource_group.id
+  location                  = var.location
+  schema_validation_enabled = false
+  tags                      = local.node_tags[each.key]
+
+  body = {
+    extendedLocation = local.extended_location
+    properties = {
+      containerId      = local.storage_container_resource_id
+      diskSizeGB       = each.value.data_disk_size_gb
+      dynamic          = var.dynamic_disks
+      hyperVGeneration = var.hyper_v_generation
+    }
+  }
+}
+
+resource "azapi_resource" "db_disk" {
+  for_each = {
+    for vm_name, node in local.nodes : vm_name => node
+    if try(node.db_disk_size_gb, 0) > 0
+  }
+
+  type                      = "Microsoft.AzureStackHCI/virtualHardDisks@2024-01-01"
+  name                      = "${each.key}-dbdisk"
+  parent_id                 = azapi_resource.resource_group.id
+  location                  = var.location
+  schema_validation_enabled = false
+  tags                      = local.node_tags[each.key]
+
+  body = {
+    extendedLocation = local.extended_location
+    properties = {
+      containerId      = local.storage_container_resource_id
+      diskSizeGB       = each.value.db_disk_size_gb
+      dynamic          = var.dynamic_disks
+      hyperVGeneration = var.hyper_v_generation
+    }
+  }
+}
+
+resource "azapi_resource" "log_disk" {
+  for_each = {
+    for vm_name, node in local.nodes : vm_name => node
+    if try(node.log_disk_size_gb, 0) > 0
+  }
+
+  type                      = "Microsoft.AzureStackHCI/virtualHardDisks@2024-01-01"
+  name                      = "${each.key}-logdisk"
+  parent_id                 = azapi_resource.resource_group.id
+  location                  = var.location
+  schema_validation_enabled = false
+  tags                      = local.node_tags[each.key]
+
+  body = {
+    extendedLocation = local.extended_location
+    properties = {
+      containerId      = local.storage_container_resource_id
+      diskSizeGB       = each.value.log_disk_size_gb
+      dynamic          = var.dynamic_disks
+      hyperVGeneration = var.hyper_v_generation
+    }
+  }
+}
+
 resource "azapi_resource" "virtual_machine_instance" {
   for_each = local.nodes
 
-  type      = "Microsoft.AzureStackHCI/virtualMachineInstances@2026-02-01-preview"
-  name      = "default"
-  parent_id = azapi_resource.machine[each.key].id
+  type                      = "Microsoft.AzureStackHCI/virtualMachineInstances@2024-01-01"
+  name                      = "default"
+  parent_id                 = azapi_resource.machine[each.key].id
+  schema_validation_enabled = false
 
   identity {
     type = "SystemAssigned"
@@ -140,12 +176,38 @@ resource "azapi_resource" "virtual_machine_instance" {
   body = {
     extendedLocation = local.extended_location
     properties = {
-      createFromLocal = false
       hardwareProfile = {
-        memoryMB   = each.value.memory_mb
-        processors = each.value.processors
         vmSize     = try(each.value.vm_size, var.default_vm_size)
+        processors = each.value.processors
+        memoryMB   = each.value.memory_mb
       }
+      osProfile = {
+        adminUsername        = var.admin_username
+        computerName         = each.key
+        windowsConfiguration = local.windows_configuration
+      }
+      storageProfile = merge(
+        {
+          imageReference = {
+            id = local.image_resource_id
+          }
+          osDisk = {
+            osType = var.os_type
+          }
+          vmConfigStoragePathId = local.storage_container_resource_id
+        },
+        length(concat(
+          try([{ id = azapi_resource.data_disk[each.key].id }], []),
+          try([{ id = azapi_resource.db_disk[each.key].id }], []),
+          try([{ id = azapi_resource.log_disk[each.key].id }], [])
+          )) > 0 ? {
+          dataDisks = concat(
+            try([{ id = azapi_resource.data_disk[each.key].id }], []),
+            try([{ id = azapi_resource.db_disk[each.key].id }], []),
+            try([{ id = azapi_resource.log_disk[each.key].id }], [])
+          )
+        } : {}
+      )
       networkProfile = {
         networkInterfaces = [
           {
@@ -153,37 +215,12 @@ resource "azapi_resource" "virtual_machine_instance" {
           }
         ]
       }
-      osProfile = {
-        adminUsername = var.admin_username
-        computerName  = each.value.name
-        windowsConfiguration = {
-          enableAutomaticUpdates = var.enable_automatic_updates
-          provisionVMAgent       = var.provision_vm_agent
-          provisionVMConfigAgent = var.provision_vm_config_agent
-          timeZone               = var.windows_time_zone
-        }
-      }
       securityProfile = {
         enableTPM    = var.enable_tpm
         securityType = var.security_type
         uefiSettings = {
           secureBootEnabled = var.secure_boot_enabled
         }
-      }
-      storageProfile = {
-        imageReference = {
-          id = try(each.value.image_id, var.image_id)
-        }
-        osDisk = {
-          id     = azapi_resource.os_disk[each.key].id
-          osType = var.os_type
-        }
-        dataDisks = [
-          {
-            id = azapi_resource.data_disk[each.key].id
-          }
-        ]
-        vmConfigStoragePathId = var.storage_container_id
       }
     }
   }

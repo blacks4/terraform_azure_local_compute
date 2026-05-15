@@ -1,15 +1,26 @@
 resource_group_name = "rg-azure-local-vms"
 location            = "eastus"
-subscription_id     = "00000000-0000-0000-0000-000000000000"
-tenant_id           = "00000000-0000-0000-0000-000000000000"
+# subscription_id     = "00000000-0000-0000-0000-000000000000" # optional override; default is current authenticated subscription
+# tenant_id           = "00000000-0000-0000-0000-000000000000" # optional override
 
-# Replace these IDs with values from your Azure Local environment.
-custom_location_id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.ExtendedLocation/customLocations/azure-local-cl"
-storage_container_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.AzureStackHCI/storageContainers/default"
-logical_network_id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.AzureStackHCI/logicalNetworks/lnet-prod"
-image_id             = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/windows-server-2022"
+# Replace these names with values from your Azure Local environment.
+custom_location_id   = "azure-local-cl"
+storage_container_id = "default"
+logical_network_id   = "lnet-prod"
+image_id             = "windows-server-2022"
+windows_time_zone    = "Eastern Standard Time"
 
-dns_servers = ["10.0.0.10", "10.0.0.11"]
+# Optional settings (shown explicitly so users can tune behavior).
+# os_type = "Windows" # default for os_type is "Windows"
+# default_vm_size = "Custom" # default for default_vm_size is "Custom"
+# dynamic_disks = true # default for dynamic_disks is true
+# hyper_v_generation = "V2" # default for hyper_v_generation is "V2"
+# enable_automatic_updates = true # default for enable_automatic_updates is true
+# provision_vm_agent = true # default for provision_vm_agent is true
+# provision_vm_config_agent = true # default for provision_vm_config_agent is true
+# enable_tpm = true # default for enable_tpm is true
+# secure_boot_enabled = true # default for secure_boot_enabled is true
+# security_type = "TrustedLaunch" # default for security_type is "TrustedLaunch"
 
 admin_username = "localadmin"
 
@@ -28,128 +39,125 @@ tags = {
 }
 
 compute_nodes = {
-  "compute_01" = {
-    name              = "win-app-01"
+  "win-app-01" = {
     private_ip        = "10.0.20.11"
     processors        = 4
     memory_mb         = 8192
-    os_disk_size_gb   = 128
     data_disk_size_gb = 256
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 0
     tags = {
       role               = "app"
       notes              = "Primary application node"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_02" = {
-    name              = "win-app-02"
+  "win-app-02" = {
     private_ip        = "10.0.20.12"
-    image_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/windows-server-2022-app"
     processors        = 4
     memory_mb         = 8192
-    os_disk_size_gb   = 128
     data_disk_size_gb = 512
+    db_disk_size_gb   = 256
+    log_disk_size_gb  = 128
     tags = {
       role               = "app"
       notes              = "Secondary application node"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_03" = {
-    name              = "win-web-01"
+  "win-web-01" = {
     private_ip        = "10.0.20.13"
     processors        = 2
     memory_mb         = 4096
-    os_disk_size_gb   = 96
     data_disk_size_gb = 128
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 0
     tags = {
       role               = "web"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_04" = {
-    name              = "win-web-02"
+  "win-web-02" = {
     private_ip        = "10.0.20.14"
     processors        = 2
     memory_mb         = 4096
-    os_disk_size_gb   = 96
     data_disk_size_gb = 128
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 0
     tags = {
       role               = "web"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_05" = {
-    name              = "win-sql-01"
+  "win-sql-01" = {
     private_ip        = "10.0.20.15"
-    image_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/windows-server-2022-sql"
     processors        = 8
     memory_mb         = 32768
-    os_disk_size_gb   = 256
     data_disk_size_gb = 1024
+    db_disk_size_gb   = 512
+    log_disk_size_gb  = 256
     tags = {
       role               = "sql"
       notes              = "Primary SQL node"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_06" = {
-    name              = "win-sql-02"
+  "win-sql-02" = {
     private_ip        = "10.0.20.16"
-    image_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-azure-local/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/windows-server-2022-sql"
     processors        = 8
     memory_mb         = 32768
-    os_disk_size_gb   = 256
     data_disk_size_gb = 1024
+    db_disk_size_gb   = 512
+    log_disk_size_gb  = 256
     tags = {
       role               = "sql"
       notes              = "Secondary SQL node"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_07" = {
-    name              = "win-batch-01"
+  "win-batch-01" = {
     private_ip        = "10.0.20.17"
     processors        = 6
     memory_mb         = 16384
-    os_disk_size_gb   = 128
     data_disk_size_gb = 768
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 128
     tags = {
       role               = "batch"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_08" = {
-    name              = "win-batch-02"
+  "win-batch-02" = {
     private_ip        = "10.0.20.18"
     processors        = 6
     memory_mb         = 16384
-    os_disk_size_gb   = 128
     data_disk_size_gb = 768
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 128
     tags = {
       role               = "batch"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_09" = {
-    name              = "win-util-01"
+  "win-util-01" = {
     private_ip        = "10.0.20.19"
     processors        = 2
     memory_mb         = 8192
-    os_disk_size_gb   = 128
-    data_disk_size_gb = 256
+    data_disk_size_gb = 0
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 0
     tags = {
       role               = "utility"
       service_now_ticket = "CHG0000001"
     }
   }
-  "compute_10" = {
-    name              = "win-util-02"
+  "win-util-02" = {
     private_ip        = "10.0.20.20"
     processors        = 2
     memory_mb         = 8192
-    os_disk_size_gb   = 128
-    data_disk_size_gb = 256
+    data_disk_size_gb = 0
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 0
     tags = {
       role               = "utility"
       service_now_ticket = "CHG0000001"

@@ -15,7 +15,9 @@ The top-level provider configuration lives in `terraform.tf`. The Azure Local re
 
 This configuration is intended to run in HCP Terraform/Terraform Cloud without Azure CLI authentication.
 
-The preferred approach is Terraform Cloud dynamic provider credentials for Azure, backed by an Azure application registration with federated identity credentials. Configure the Terraform Cloud workspace or a global variable set with these Terraform variables:
+The preferred approach is Terraform Cloud dynamic provider credentials for Azure, backed by an Azure application registration with federated identity credentials. The module can auto-detect the current authenticated subscription via `data.azapi_client_config.current`, and `subscription_id` can be set only when you want to override it explicitly.
+
+Configure the Terraform Cloud workspace or a global variable set with these Terraform variables:
 
 ```text
 subscription_id = "<subscription-id>"
@@ -43,6 +45,10 @@ ARM_CLIENT_SECRET   = "<client-secret>"
 When using the static service principal fallback, do not set `TFC_AZURE_PROVIDER_AUTH`.
 
 The identity running Terraform needs permission to create and manage the target resource group and the Azure Local ARM resources. If provider registration is enabled, it also needs permission to register required resource providers such as `Microsoft.AzureStackHCI`, `Microsoft.HybridCompute`, and `Microsoft.ExtendedLocation`.
+
+In `terraform.tfvars.example`, `subscription_id` and `tenant_id` are shown as commented lines because many Terraform Cloud setups source those from workspace/global variables or environment variables. If you are running locally, set them in your `.tfvars` file or provide them another supported way. If `subscription_id` is not set, the current authenticated subscription is used automatically.
+
+The example now accepts short names for `custom_location_id`, `storage_container_id`, `logical_network_id`, and `image_id` (for example `lnet-prod` or `windows-server-2022`). The module assembles the full ARM resource IDs internally using `subscription_id`, `resource_group_name`, and the provider path for each resource type.
 
 ## Admin Password
 
@@ -84,18 +90,32 @@ If you change the password in Vault and then add a new cluster or new node resou
 
 Global/shared values are kept at the top of `terraform.tfvars`. Per-node compute settings live under `compute_nodes`.
 
-Each node can set a unique name, private IP, image, CPU count, memory, C: disk size, D: disk size, and tags:
+Top-level resource selectors are names, not full ARM IDs. Example:
+
+```hcl
+custom_location_id   = "azure-local-cl"
+storage_container_id = "default"
+logical_network_id   = "lnet-prod"
+image_id             = "windows-server-2022"
+```
+
+The example file also includes optional variables that already have defaults, but they are shown as commented one-liners so users can quickly enable overrides only when needed. For example:
+
+```hcl
+# security_type = "TrustedLaunch" # default for security_type is "TrustedLaunch"
+```
+
+Each node key is the VM name. Each entry can set private IP, CPU count, memory, up to three optional data disks, and tags:
 
 ```hcl
 compute_nodes = {
-  "compute_01" = {
-    name              = "win-app-01"
+  "win-app-01" = {
     private_ip        = "10.0.20.11"
-    image_id          = "/subscriptions/.../providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/windows-server-2022"
     processors        = 4
     memory_mb         = 8192
-    os_disk_size_gb   = 128
     data_disk_size_gb = 256
+    db_disk_size_gb   = 0
+    log_disk_size_gb  = 0
     tags = {
       role               = "app"
       notes              = "Primary application node"
@@ -104,8 +124,6 @@ compute_nodes = {
   }
 }
 ```
-
-If a node does not set `image_id`, it uses the top-level `image_id` value.
 
 Global tags are merged with each node's `tags`. If the same tag key appears in both places, the node-specific value wins.
 
@@ -134,4 +152,4 @@ terraform apply
 
 ## Notes
 
-The Azure Local VM instance extension resource does not expose `tags` in the AzAPI schema currently used here. Per-node tags are applied to the Hybrid Compute machine parent, NIC, and C:/D: disk resources.
+The Azure Local VM instance extension resource does not expose `tags` in the AzAPI schema currently used here. Per-node tags are applied to the Hybrid Compute machine parent, NIC, and optional data/db/log disk resources.
