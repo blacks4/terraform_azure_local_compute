@@ -11,7 +11,7 @@ locals {
   logical_network_resource_id   = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/logicalNetworks/${var.logical_network_id}"
   image_resource_id             = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/${var.image_id}"
   cluster_name_suffix_raw       = join("-", regexall("[a-z0-9-]+", lower(var.custom_location_id)))
-  cluster_name_suffix           = substr(local.cluster_name_suffix_raw, 0, 12)
+  cluster_name_suffix           = local.cluster_name_suffix_raw
 
   node_tags = {
     for vm_name, node in local.nodes : vm_name => merge(var.tags, try(node.tags, {}))
