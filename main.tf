@@ -10,7 +10,7 @@ locals {
   storage_container_resource_id = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/storageContainers/${var.storage_container_id}"
   logical_network_resource_id   = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/logicalNetworks/${var.logical_network_id}"
   image_resource_id             = "/subscriptions/${local.effective_subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.AzureStackHCI/marketplaceGalleryImages/${var.image_id}"
-  cluster_name_suffix_raw       = lower(regexreplace(var.custom_location_id, "[^a-z0-9-]", "-"))
+  cluster_name_suffix_raw       = join("-", regexall("[a-z0-9-]+", lower(var.custom_location_id)))
   cluster_name_suffix           = substr(local.cluster_name_suffix_raw, 0, 12)
 
   node_tags = {
